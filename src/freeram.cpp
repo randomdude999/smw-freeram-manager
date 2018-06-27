@@ -19,7 +19,7 @@ bool str_ends_with(const char* str, const char* ending) {
 	return strcmp(str + str_len - end_len, ending) == 0;
 }
 
-bool identifier_is_valid(char* identifier) {
+bool identifier_is_valid(const char* identifier) {
 	if(identifier == NULL) return false;
 	if(!isalpha(identifier[0]) && identifier[0] != '_') return false; // will also catch empty string
 	for(int i = 1; identifier[i]; i++) {
@@ -39,7 +39,7 @@ char* read_file_into_str(FILE* f) {
 	char* buf;
 	fseek(f, 0, SEEK_END);
 	long length = ftell(f);
-	buf = malloc(length);
+	buf = (char*)malloc(length);
 	fread(buf, 1, length, f);
 	return buf;
 }
@@ -47,7 +47,7 @@ char* read_file_into_str(FILE* f) {
 bool validate_ramdesc_json(cJSON* ramdesc) {
 	cJSON* tmp;
 	cJSON* elem;
-	cJSON* ram = cJSON_GetObjectItemCaseSensitive(data, "ram");
+	cJSON* ram = cJSON_GetObjectItemCaseSensitive(ramdesc, "ram");
 	if(!cJSON_IsArray(ram)) return false;
 
 	cJSON_ArrayForEach(elem, ram) {
@@ -68,7 +68,7 @@ bool validate_ramdesc_json(cJSON* ramdesc) {
 		}
 	}
 
-	cJSON* claims = cJSON_GetObjectItemCaseSensitive(data, "claims");
+	cJSON* claims = cJSON_GetObjectItemCaseSensitive(ramdesc, "claims");
 	if(!cJSON_IsObject(claims)) return false;
 
 	// i love how arrayforeach works on objects too
@@ -112,7 +112,7 @@ public:
 		start_addr = i_addr;
 		length = i_len;
 		flagc = 0;
-		flags = calloc(i_flagc, sizeof(char*));
+		flags = (char**)calloc(i_flagc, sizeof(char*));
 	}
 	// call after calling constructor to add a flag
 	void add_flag(const char* flag) {
@@ -142,7 +142,7 @@ public:
 		length = i_len;
 		identifier = strdup_(i_id);
 		flagc = 0;
-		flags = calloc(i_flagc, sizeof(char*));
+		flags = (char**)calloc(i_flagc, sizeof(char*));
 	}
 	// call after calling constructor to add a flag
 	void add_flag(const char* flag) {
@@ -182,15 +182,15 @@ public:
 
 		int i = 0;
 		cJSON_ArrayForEach(elem, ram) {
-			start_addr = cJSON_GetObjectItemCaseSensitive(elem, "address")->valueint;
+			int start_addr = cJSON_GetObjectItemCaseSensitive(elem, "address")->valueint;
 
-			length = cJSON_GetObjectItemCaseSensitive(elem, "length")->valueint;
+			int length = cJSON_GetObjectItemCaseSensitive(elem, "length")->valueint;
 
 			cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
 			int numflags = cJSON_GetArraySize(flags_arr);
 			ram_entries[i] = ram_entry(start_addr, length, numflags);
 			cJSON_ArrayForEach(tmp, flags_arr) {
-				ram_entries[i].add_flag(tmp->stringvalue);
+				ram_entries[i].add_flag(tmp->valuestring);
 			}
 			i++;
 		}
@@ -211,7 +211,7 @@ public:
 			int numflags = cJSON_GetArraySize(flags_arr);
 			claim_entries[i] = claim_entry(addr, len, id, numflags);
 			cJSON_ArrayForEach(tmp, flags_arr) {
-				claim_entries[i].add_flag(tmp->stringvalue);
+				claim_entries[i].add_flag(tmp->valuestring);
 			}
 			i++;
 		}
@@ -227,14 +227,18 @@ public:
 		for(int i = 0; i < ram_entry_count; i++)
 			ram_entries[i].~ram_entry();
 		free(ram_entries);
-		for(i = 0; i < claim_entry_count; i++)
+		for(int i = 0; i < claim_entry_count; i++)
 			claim_entries[i].~claim_entry();
 		free(claim_entries);
 		free(open_path);
 	}
 
-	int get_ram(int size, char* identifier, char* flags) {
+	int get_ram(int size, const char* identifier, const char* flags) {
 		if(!identifier_is_valid(identifier)) return -3;
+
+	}
+
+	int unclaim_ram(const char* identifier) {
 
 	}
 };
@@ -253,8 +257,8 @@ EXPORT freeram_handle* freeram_open(const char* romname, char** err_str) {
 	FILE* f = fopen(ramf_name, "r");
 	if(!f) {
 		char* tmp = strerror(errno);
-		*err_str = malloc(strlen(tmp) + sizeof("Error opening ramdesc file: "));
-		strcpy(*err_str, "Error opening romfile: ");
+		*err_str = (char*)malloc(strlen(tmp) + sizeof("Error opening ramdesc file: "));
+		strcpy(*err_str, "Error opening ramdesc file: ");
 		strcat(*err_str, tmp);
 		free(ramf_name);
 		return NULL;
@@ -266,7 +270,7 @@ EXPORT freeram_handle* freeram_open(const char* romname, char** err_str) {
 		int err_pos = cJSON_GetErrorPtr() - text;
 		free(text);
 		free(ramf_name);
-		*err_str = malloc(256);
+		*err_str = (char*)malloc(256);
 		sprintf(*err_str, "Error parsing JSON at position %d", err_pos);
 		return NULL;
 	}
@@ -277,7 +281,7 @@ EXPORT freeram_handle* freeram_open(const char* romname, char** err_str) {
 		return h;
 	} catch (invalid_ramf_error) {
 		cJSON_Delete(data);
-		*err_str = malloc(256);
+		*err_str = (char*)malloc(256);
 		strcpy(*err_str, "Invalid JSON data found");
 		free(ramf_name);
 		return NULL;
@@ -289,11 +293,16 @@ EXPORT int freeram_close(freeram_handle* handle) {
 	// write it to a file
 	cJSON_Delete(obj);
 	delete handle;
-	return TRUE;
+	return 1;
 
 };
 
-EXPORT int freeram_get_ram(freeram_handle* handle, int size, char* identifier, char* flags) {
+EXPORT int freeram_get_ram(freeram_handle* handle, int size, const char* identifier, const char* flags) {
 	if(handle == NULL) return -2;
 	return handle->get_ram(size, identifier, flags);
 };
+
+EXPORT int freeram_unclaim_ram(freeram_handle* handle, const char* identifier) {
+	if(handle == NULL) return -2;
+	return handle->unclaim_ram(identifier);
+}

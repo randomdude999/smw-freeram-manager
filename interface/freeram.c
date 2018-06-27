@@ -37,9 +37,9 @@
 
 static void* freeramdll = NULL;
 
-static freeram_handle (*dll_openfunc)(char*);
+static freeram_handle (*dll_openfunc)(const char*, char**);
 static int (*dll_closefunc)(freeram_handle);
-static int (*dll_getramfunc)(freeram_handle, int, char*, char*);
+static int (*dll_getramfunc)(freeram_handle, int, const char*, const char*);
 static int (*dll_unclaimfunc)(freeram_handle, char*);
 
 int freeram_loadlib() {
@@ -59,9 +59,9 @@ int freeram_unloadlib() {
 	closelib();
 }
 
-freeram_handle freeram_open(char* romname) {
+freeram_handle freeram_open(const char* romname, char** error) {
 	if(!freeramdll) return NULL;
-	return dll_openfunc(romname);
+	return dll_openfunc(romname, error);
 }
 
 int freeram_close(freeram_handle handle) {
@@ -69,7 +69,7 @@ int freeram_close(freeram_handle handle) {
 	return dll_closefunc(handle);
 }
 
-int freeram_get_ram(freeram_handle handle, int size, char* identifier, char* flags) {
+int freeram_get_ram(freeram_handle handle, int size, const char* identifier, const char* flags) {
 	if(!freeramdll) return -2;
 	return dll_getramfunc(handle, size, identifier, flags);
 }

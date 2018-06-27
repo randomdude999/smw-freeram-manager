@@ -6,9 +6,10 @@ int main() {
 		fprintf(stderr, "Couldn't load library");
 		return 1;
 	}
-	freeram_handle* handle = freeram_open("test.smc");
+	char* error;
+	freeram_handle* handle = freeram_open("test.smc", &error);
 	if(!handle) {
-		fprintf(stderr, "Couldn't load ramfile");
+		fprintf(stderr, "Couldn't load ramfile: %s", error);
 		return 1;
 	}
 	fprintf(stderr, "Claimed freeram: %08X", freeram_get_ram(handle, 32, "test", "+addr +clear_ow"));
