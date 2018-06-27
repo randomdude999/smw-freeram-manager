@@ -169,36 +169,25 @@ public:
 
 	char* open_path;
 
-	freeram_handle(cJSON* data, char* fname) {
-		open_path = fname;
+	freeram_handle(cJSON* data, const char* fname) {
+		open_path = strdup(fname);
 		cJSON* elem;
 		cJSON* tmp;
+		if(!validate_ramdesc_json(data)) throw invalid_ramf_error();
 		cJSON* ram = cJSON_GetObjectItemCaseSensitive(data, "ram");
-		if(!cJSON_IsArray(ram)) throw invalid_ramf_error();
 
 		int l = cJSON_GetArraySize(ram);
 		ram_entries = (ram_entry*)calloc(l, sizeof(ram_entry));
 		ram_entry_count = l;
 
 		int i = 0;
-
-
 		cJSON_ArrayForEach(elem, ram) {
-			if(!cJSON_IsObject(elem)) throw invalid_ramf_error();
+			start_addr = cJSON_GetObjectItemCaseSensitive(elem, "address")->valueint;
 
-			tmp = cJSON_GetObjectItemCaseSensitive(elem, "address");
-			if(!cJSON_IsNumber(tmp)) throw invalid_ramf_error();
-
-			tmp = cJSON_GetObjectItemCaseSensitive(elem, "length");
-			if(!cJSON_IsNumber(tmp)) throw invalid_ramf_error();
+			length = cJSON_GetObjectItemCaseSensitive(elem, "length")->valueint;
 
 			cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
-			if(!cJSON_IsArray(flags_arr)) throw invalid_ramf_error();
-
-			cJSON_ArrayForEach(tmp, flags_arr) {
-				if(!cJSON_IsString(tmp)) err();
-				if(!identifier_is_valid(tmp->stringvalue)) err();
-			}
+			int numflags = cJSON_GetArraySize(flags_arr);
 			ram_entries[i] = ram_entry(start_addr, length, numflags);
 			cJSON_ArrayForEach(tmp, flags_arr) {
 				ram_entries[i].add_flag(tmp->stringvalue);
@@ -206,33 +195,23 @@ public:
 			i++;
 		}
 
+		cJSON* claims = cJSON_GetObjectItemCaseSensitive(data, "claims");
 
-		cJSON_ArrayForEach(elem, ram) {
+		l = cJSON_GetArraySize(claims);
+		claim_entries = (claim_entry*)calloc(l, sizeof(claim_entry));
+		claim_entry_count = l;
 
-#define err() {free(ram_entries); throw invalid_ramf_error();}
-
-			if(!cJSON_IsObject(elem)) err();
-
-			tmp = cJSON_GetObjectItemCaseSensitive(elem, "address");
-			if(!cJSON_IsNumber(tmp)) err();
-			int start_addr = tmp->valueint;
-
-			tmp = cJSON_GetObjectItemCaseSensitive(elem, "length");
-			if(!cJSON_IsNumber(tmp)) err();
-			int length = tmp->valueint;
+		i = 0;
+		cJSON_ArrayForEach(elem, claims) {
+			const char* id = elem->string;
+			int addr = cJSON_GetObjectItemCaseSensitive(elem, "address")->valueint;
+			int len = cJSON_GetObjectItemCaseSensitive(elem, "length")->valueint;
 
 			cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
-			if(!cJSON_IsArray(flags_arr)) err();
 			int numflags = cJSON_GetArraySize(flags_arr);
-			// iterate twice - first to check errors, 2nd time to actually allocate memory
-			// (it's annoying to do errors if i need to free half of the stuff)
+			claim_entries[i] = claim_entry(addr, len, id, numflags);
 			cJSON_ArrayForEach(tmp, flags_arr) {
-				if(!cJSON_IsString(tmp)) err();
-				if(!identifier_is_valid(tmp->stringvalue)) err();
-			}
-			ram_entries[i] = ram_entry(start_addr, length, numflags);
-			cJSON_ArrayForEach(tmp, flags_arr) {
-				ram_entries[i].add_flag(tmp->stringvalue);
+				claim_entries[i].add_flag(tmp->stringvalue);
 			}
 			i++;
 		}
