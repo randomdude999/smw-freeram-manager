@@ -16,3 +16,7 @@ int freeram_close(freeram_handle handle);
 // -3 - invalid identifier
 // -4 - invalid flags
 int freeram_get_ram(freeram_handle handle, int size, const char* identifier, const char* flags);
+// Unclaim the freeram with the specified identifier. Returns 0 on success.
+// returns -1 if that address wasn't claimed
+//         -2 if the library isn't loaded
+int freeram_unclaim_ram(freeram_handle handle, const char* identifier);

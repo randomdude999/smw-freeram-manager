@@ -6,21 +6,24 @@ commented example document:
 	// this could be updated with info from new tools that hardcode their ram
 	"ram": [
 	{
-		"addr": 0, // start address of this freeram (SNES address converted to decimal. abs/dp should assume bank 0/dp 0000)
-		"len": 0, // length of this freeram
+		"address": 0, // start address of this freeram (SNES address converted to decimal. abs/dp should assume bank 0/dp 0000)
+		"length": 0, // length of this freeram
 		"flags": ["sa1"] // list of flags for this freeram
 	}
 	],
-	"claims": [
-	{
-		"addr": 0, // start address of the claim (SNES address converted to decimal)
-		"len": 0, // length of the claim
-		"identifier": "id", // a unique identifier for this freeram. if you try to allocate multiple freerams with the same ID, the first one will be returned.
-		"flags": ["sa1"] // list of flags this freeram was requested with. Used to check incompatible requests with the same id
+	"claims": {
+		"id": { // a unique identifier for this freeram. if you try to allocate multiple freerams with the same ID, the first one will be returned.
+			"address": 0, // start address of the claim (SNES address converted to decimal)
+			"length": 0, // length of the claim
+			"flags": ["sa1", "-addr"] // list of flags this freeram was requested with. Used to check incompatible requests with the same id
+		}
 	}
-	]
 }
 
 Flags:
 When requesting freeram, you can specify a list of flags that said freeram must/must not have. "Must" flags don't have prefixes, "must not" flags are prefixed with "-".
 I'm quite sure it's possible to handle SA-1 with this flags method.
+Flag names have same limits as IDs, which have the same limits as C identifiers (start with alphabetical or '_', continue with alphanumerical or '_')
+
+IDs:
+When claiming, you supply an ID for the freeram. When requesting freeram later with the same ID, you'll just get the same address returned.

@@ -1,7 +1,9 @@
 #include <ctype.h> // isalpha, isalnum
 #include <stdio.h> // fopen, fread, fclose
-#include <string.h> // strlen, strcmp
+#include <string.h> // strlen, strcmp, strerror
 #include <stdlib.h> // malloc, calloc, free
+#include <errno.h> // errno
+
 #include "cJSON.h"
 
 #if defined(_WIN32)
@@ -27,6 +29,12 @@ bool identifier_is_valid(char* identifier) {
 	return true;
 }
 
+char* strdup_(const char* inp) {
+	char* out = (char*)malloc(strlen(inp)+1);
+	strcpy(out, inp);
+	return out;
+}
+
 char* read_file_into_str(FILE* f) {
 	char* buf;
 	fseek(f, 0, SEEK_END);
@@ -36,30 +44,110 @@ char* read_file_into_str(FILE* f) {
 	return buf;
 }
 
+bool validate_ramdesc_json(cJSON* ramdesc) {
+		cJSON* ram = cJSON_GetObjectItemCaseSensitive(data, "ram");
+		if(!cJSON_IsArray(ram)) return false;
+
+		cJSON_ArrayForEach(elem, ram) {
+			if(!cJSON_IsObject(elem)) return false;
+
+			tmp = cJSON_GetObjectItemCaseSensitive(elem, "address");
+			if(!cJSON_IsNumber(tmp)) return false;
+
+			tmp = cJSON_GetObjectItemCaseSensitive(elem, "length");
+			if(!cJSON_IsNumber(tmp)) return false;
+
+			cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
+			if(!cJSON_IsArray(flags_arr)) return false;
+
+			cJSON_ArrayForEach(tmp, flags_arr) {
+				if(!cJSON_IsString(tmp)) return false;
+				if(!identifier_is_valid(tmp->stringvalue)) return false;
+			}
+			ram_entries[i] = ram_entry(start_addr, length, numflags);
+			cJSON_ArrayForEach(tmp, flags_arr) {
+				ram_entries[i].add_flag(tmp->stringvalue);
+			}
+			i++;
+		}
+
+
+}
+
 class invalid_ramf_error {};
 
-struct ram_entry {
+// it should be safe to deconstruct this while you're in the middle of adding flags
+class ram_entry {
+public:
 	int start_addr;
 	int length;
 	char** flags;
 	int flagc;
+
+	// flagc is only used for preallocating the flag list
+	ram_entry(int i_addr, int i_len, int i_flagc) {
+		start_addr = i_addr;
+		length = i_len;
+		flagc = 0;
+		flags = calloc(i_flagc, sizeof(char*));
+	}
+	// call after calling constructor to add a flag
+	void add_flag(const char* flag) {
+		flags[flagc] = strdup_(flag);
+		flagc++;
+	}
+
+	~ram_entry() {
+		for(int i = 0; i < flagc; i++) {
+			free(flags[i]);
+		}
+		free(flags);
+	}
 };
 
-struct claim_entry {
+class claim_entry {
+public:
 	int start_addr;
 	int length;
 	char* identifier;
+	char** flags;
+	int flagc;
+
+	// flagc is only used for preallocating the flag list
+	claim_entry(int i_addr, int i_len, const char* i_id, int i_flagc) {
+		start_addr = i_addr;
+		length = i_len;
+		identifier = strdup(i_id);
+		flagc = 0;
+		flags = calloc(i_flagc, sizeof(char*));
+	}
+	// call after calling constructor to add a flag
+	void add_flag(const char* flag) {
+		flags[flagc] = strdup(flag);
+		flagc++;
+	}
+
+	~claim_entry() {
+		for(int i = 0; i < flagc; i++) {
+			free(flags[i]);
+		}
+		free(flags);
+		free(identifier);
+	}
 };
 
 class freeram_handle {
+public:
 	ram_entry* ram_entries;
 	long ram_entry_count;
 
 	claim_entry* claim_entries;
 	long claim_entry_count;
 
-public:
-	freeram_handle(cJSON* data) {
+	char* open_path;
+
+	freeram_handle(cJSON* data, char* fname) {
+		open_path = fname;
 		cJSON* elem;
 		cJSON* tmp;
 		cJSON* ram = cJSON_GetObjectItemCaseSensitive(data, "ram");
@@ -70,32 +158,81 @@ public:
 		ram_entry_count = l;
 
 		int i = 0;
+
+
+		cJSON_ArrayForEach(elem, ram) {
+			if(!cJSON_IsObject(elem)) throw invalid_ramf_error();
+
+			tmp = cJSON_GetObjectItemCaseSensitive(elem, "address");
+			if(!cJSON_IsNumber(tmp)) throw invalid_ramf_error();
+
+			tmp = cJSON_GetObjectItemCaseSensitive(elem, "length");
+			if(!cJSON_IsNumber(tmp)) throw invalid_ramf_error();
+
+			cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
+			if(!cJSON_IsArray(flags_arr)) throw invalid_ramf_error();
+
+			cJSON_ArrayForEach(tmp, flags_arr) {
+				if(!cJSON_IsString(tmp)) err();
+				if(!identifier_is_valid(tmp->stringvalue)) err();
+			}
+			ram_entries[i] = ram_entry(start_addr, length, numflags);
+			cJSON_ArrayForEach(tmp, flags_arr) {
+				ram_entries[i].add_flag(tmp->stringvalue);
+			}
+			i++;
+		}
+
+
 		cJSON_ArrayForEach(elem, ram) {
 
 #define err() {free(ram_entries); throw invalid_ramf_error();}
 
 			if(!cJSON_IsObject(elem)) err();
 
-			tmp = cJSON_GetObjectItemCaseSensitive(elem, "addr");
+			tmp = cJSON_GetObjectItemCaseSensitive(elem, "address");
 			if(!cJSON_IsNumber(tmp)) err();
-			ram_entries[i].start_addr = tmp->valueint;
+			int start_addr = tmp->valueint;
 
-			tmp = cJSON_GetObjectItemCaseSensitive(elem, "len");
+			tmp = cJSON_GetObjectItemCaseSensitive(elem, "length");
 			if(!cJSON_IsNumber(tmp)) err();
-			ram_entries[i].length = tmp->valueint;
+			int length = tmp->valueint;
 
 			cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
 			if(!cJSON_IsArray(flags_arr)) err();
+			int numflags = cJSON_GetArraySize(flags_arr);
+			// iterate twice - first to check errors, 2nd time to actually allocate memory
+			// (it's annoying to do errors if i need to free half of the stuff)
 			cJSON_ArrayForEach(tmp, flags_arr) {
-
+				if(!cJSON_IsString(tmp)) err();
+				if(!identifier_is_valid(tmp->stringvalue)) err();
+			}
+			ram_entries[i] = ram_entry(start_addr, length, numflags);
+			cJSON_ArrayForEach(tmp, flags_arr) {
+				ram_entries[i].add_flag(tmp->stringvalue);
 			}
 			i++;
 		}
 	}
 
+	cJSON* serialize() {
+		cJSON* out = cJSON_CreateObject();
+		// ...
+		return out;
+	}
+
 	~freeram_handle() {
+		for(int i = 0; i < ram_entry_count; i++)
+			for(int j = 0; j < ram_entries[i].flagc; j++)
+				free(ram_entries[i].flags[j]);
 		free(ram_entries);
+		for(i = 0; i < claim_entry_count; i++) {
+			for(j = 0; j < claim_entries[i].flagc; j++)
+				free(claim_entries[i].flags[j]);
+			free(claim_entries[i].identifier);
+		}
 		free(claim_entries);
+		free(open_path);
 	}
 
 	int get_ram(int size, char* identifier, char* flags) {
@@ -117,26 +254,44 @@ EXPORT freeram_handle* freeram_open(const char* romname, char** err_str) {
 	strcpy(ramf_name + new_fname_len - sizeof(".ramdesc"), ".ramdesc");
 	FILE* f = fopen(ramf_name, "r");
 	if(!f) {
-		
+		char* tmp = strerror(errno);
+		*err_str = malloc(strlen(tmp) + sizeof("Error opening ramdesc file: "));
+		strcpy(*err_str, "Error opening romfile: ");
+		strcat(*err_str, tmp);
+		free(ramf_name);
 		return NULL;
 	}
-	free(ramf_name);
 	char* text = read_file_into_str(f);
 	fclose(f);
 	cJSON* data = cJSON_Parse(text);
+	if(data == NULL) {
+		int err_pos = cJSON_GetErrorPtr() - text;
+		free(text);
+		free(ramf_name);
+		*err_str = malloc(256);
+		sprintf(*err_str, "Error parsing JSON at position %d", err_pos);
+		return NULL;
+	}
 	free(text);
-	if(data == NULL) return NULL;
 	try {
-		freeram_handle* h = new freeram_handle(data);
+		freeram_handle* h = new freeram_handle(data, ramf_name);
 		cJSON_Delete(data);
 		return h;
 	} catch (invalid_ramf_error) {
 		cJSON_Delete(data);
+		*err_str = malloc(256);
+		strcpy(*err_str, "Invalid JSON data found");
+		free(ramf_name);
 		return NULL;
 	}
 };
 
 EXPORT int freeram_close(freeram_handle* handle) {
+	cJSON* obj = handle->serialize();
+	// write it to a file
+	cJSON_Delete(obj);
+	delete handle;
+	return TRUE;
 
 };
 
