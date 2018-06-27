@@ -160,13 +160,14 @@ public:
 };
 
 class freeram_handle {
-public:
+private:
 	ram_entry* ram_entries;
 	long ram_entry_count;
 
 	claim_entry* claim_entries;
 	long claim_entry_count;
 
+public:
 	char* open_path;
 
 	freeram_handle(cJSON* data, const char* fname) {
@@ -236,10 +237,20 @@ public:
 	int get_ram(int size, const char* identifier, const char* flags) {
 		if(!identifier_is_valid(identifier)) return -3;
 
+
 	}
 
 	int unclaim_ram(const char* identifier) {
-
+		for(int i = 0; i < claim_entry_count; i++) {
+			if(strcmp(claim_entries[i].identifier, identifier) == 0) {
+				claim_entries[i].~claim_entry();
+				size_t to_move = (claim_entry_count - i - 1) * sizeof(claim_entry);
+				memmove(&claim_entries[i], &claim_entries[i+1], to_move);
+				claim_entry_count--;
+				return 0;
+			}
+		}
+		return -1;
 	}
 };
 
