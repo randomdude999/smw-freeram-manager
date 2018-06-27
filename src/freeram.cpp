@@ -97,6 +97,35 @@ bool validate_ramdesc_json(cJSON* ramdesc) {
 	return true;
 }
 
+char** split_flags(const char* flags, int* flagc) {
+	int count = 1;
+	for(int i = 0; flags[i]; i++)
+		if(flags[i] == ' ') count++;
+	*flagc = count;
+	char** flag_arr = (char**)calloc(count, sizeof(char*));
+	int curflg = 0;
+	const char* cur_flag = flags;
+	for(int i = 0; flags[i]; i++) {
+		if(flags[i] == ' ') {
+			int flag_len = flags+i - cur_flag;
+			flag_arr[curflg] = malloc(flag_len);
+			strncpy(flag_arr[curflg], flags+i, flag_len);
+			cur_flag = flags+i;
+			curflg++;
+		}
+	}
+	return flag_arr;
+}
+
+bool flag_compare(char** flags_a, char** flags_b, int num) {
+	for(int i = 0; i < num; i++) {
+		if(strcmp(flags_a[i], flags_b[i]) != 0) {
+			return false;
+		}
+	}
+	return true;
+}
+
 class invalid_ramf_error {};
 
 // it should be safe to deconstruct this while you're in the middle of adding flags
@@ -234,10 +263,22 @@ public:
 		free(open_path);
 	}
 
-	int get_ram(int size, const char* identifier, const char* flags) {
+	int get_ram(int size, const char* identifier, const char* i_flags) {
 		if(!identifier_is_valid(identifier)) return -3;
 
+		int flagc;
+		char** flags = split_flags(i_flags, &flagc);
 
+		for(int i = 0; i < claim_entry_count; i++) {
+			if(strcmp(claim_entries[i].identifier, identifier) == 0) {
+				if(claim_entries[i].length != size) return -5;
+				if(claim_entries[i].flagc != flagc) return -5;
+				if(!flag_compare(claim_entries[i].flags, flags, flagc)) return -5;
+				return claim_entries[i].start_addr;
+			}
+		}
+
+		// how am i going to do this
 	}
 
 	int unclaim_ram(const char* identifier) {
