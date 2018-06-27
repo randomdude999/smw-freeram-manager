@@ -45,33 +45,56 @@ char* read_file_into_str(FILE* f) {
 }
 
 bool validate_ramdesc_json(cJSON* ramdesc) {
-		cJSON* ram = cJSON_GetObjectItemCaseSensitive(data, "ram");
-		if(!cJSON_IsArray(ram)) return false;
+	cJSON* tmp;
+	cJSON* elem;
+	cJSON* ram = cJSON_GetObjectItemCaseSensitive(data, "ram");
+	if(!cJSON_IsArray(ram)) return false;
 
-		cJSON_ArrayForEach(elem, ram) {
-			if(!cJSON_IsObject(elem)) return false;
+	cJSON_ArrayForEach(elem, ram) {
+		if(!cJSON_IsObject(elem)) return false;
 
-			tmp = cJSON_GetObjectItemCaseSensitive(elem, "address");
-			if(!cJSON_IsNumber(tmp)) return false;
+		tmp = cJSON_GetObjectItemCaseSensitive(elem, "address");
+		if(!cJSON_IsNumber(tmp)) return false;
 
-			tmp = cJSON_GetObjectItemCaseSensitive(elem, "length");
-			if(!cJSON_IsNumber(tmp)) return false;
+		tmp = cJSON_GetObjectItemCaseSensitive(elem, "length");
+		if(!cJSON_IsNumber(tmp)) return false;
 
-			cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
-			if(!cJSON_IsArray(flags_arr)) return false;
+		cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
+		if(!cJSON_IsArray(flags_arr)) return false;
 
-			cJSON_ArrayForEach(tmp, flags_arr) {
-				if(!cJSON_IsString(tmp)) return false;
-				if(!identifier_is_valid(tmp->stringvalue)) return false;
-			}
-			ram_entries[i] = ram_entry(start_addr, length, numflags);
-			cJSON_ArrayForEach(tmp, flags_arr) {
-				ram_entries[i].add_flag(tmp->stringvalue);
-			}
-			i++;
+		cJSON_ArrayForEach(tmp, flags_arr) {
+			if(!cJSON_IsString(tmp)) return false;
+			if(!identifier_is_valid(tmp->valuestring)) return false;
 		}
+	}
 
+	cJSON* claims = cJSON_GetObjectItemCaseSensitive(data, "claims");
+	if(!cJSON_IsObject(claims)) return false;
 
+	// i love how arrayforeach works on objects too
+	cJSON_ArrayForEach(elem, claims) {
+		if(!cJSON_IsObject(elem)) return false;
+		if(!identifier_is_valid(elem->string)) return false; // object key
+
+		tmp = cJSON_GetObjectItemCaseSensitive(elem, "address");
+		if(!cJSON_IsNumber(tmp)) return false;
+
+		tmp = cJSON_GetObjectItemCaseSensitive(elem, "length");
+		if(!cJSON_IsNumber(tmp)) return false;
+
+		cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
+		if(!cJSON_IsArray(flags_arr)) return false;
+
+		cJSON_ArrayForEach(tmp, flags_arr) {
+			if(!cJSON_IsString(tmp)) return false;
+			const char* flag;
+			if(tmp->valuestring[0] == '-') flag = tmp->valuestring + 1;
+			else flag = tmp->valuestring;
+			if(!identifier_is_valid(flag)) return false;
+		}
+	}
+
+	return true;
 }
 
 class invalid_ramf_error {};
