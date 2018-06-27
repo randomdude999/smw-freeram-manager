@@ -140,13 +140,13 @@ public:
 	claim_entry(int i_addr, int i_len, const char* i_id, int i_flagc) {
 		start_addr = i_addr;
 		length = i_len;
-		identifier = strdup(i_id);
+		identifier = strdup_(i_id);
 		flagc = 0;
 		flags = calloc(i_flagc, sizeof(char*));
 	}
 	// call after calling constructor to add a flag
 	void add_flag(const char* flag) {
-		flags[flagc] = strdup(flag);
+		flags[flagc] = strdup_(flag);
 		flagc++;
 	}
 
@@ -170,7 +170,7 @@ public:
 	char* open_path;
 
 	freeram_handle(cJSON* data, const char* fname) {
-		open_path = strdup(fname);
+		open_path = strdup_(fname);
 		cJSON* elem;
 		cJSON* tmp;
 		if(!validate_ramdesc_json(data)) throw invalid_ramf_error();
@@ -225,14 +225,10 @@ public:
 
 	~freeram_handle() {
 		for(int i = 0; i < ram_entry_count; i++)
-			for(int j = 0; j < ram_entries[i].flagc; j++)
-				free(ram_entries[i].flags[j]);
+			ram_entries[i].~ram_entry();
 		free(ram_entries);
-		for(i = 0; i < claim_entry_count; i++) {
-			for(j = 0; j < claim_entries[i].flagc; j++)
-				free(claim_entries[i].flags[j]);
-			free(claim_entries[i].identifier);
-		}
+		for(i = 0; i < claim_entry_count; i++)
+			claim_entries[i].~claim_entry();
 		free(claim_entries);
 		free(open_path);
 	}
