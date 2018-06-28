@@ -44,6 +44,24 @@ char* read_file_into_str(FILE* f) {
 	return buf;
 }
 
+// do the (both-ends-inclusive) ranges A and B overlap? If yes, return the overlapping segment
+// warning: this was written at 1am and it's completely untested
+bool ranges_overlap(int a_start, int a_end, int b_start, int b_end, int& overlap_start, int& overlap_end) {
+	if(a_start >= b_start && a_start <= b_end) {
+		// overlap
+		overlap_start = a_start;
+		overlap_end = (b_end > a_end) ? a_end : b_end;
+		return true;
+	} else if(a_start < b_start && a_end >= b_start) {
+		// overlap
+		overlap_start = b_start;
+		overlap_end = (b_end > a_end) ? a_end : b_end;
+		return true;
+	} else {
+		return false;
+	}
+}
+
 bool validate_ramdesc_json(cJSON* ramdesc) {
 	cJSON* tmp;
 	cJSON* elem;
@@ -413,24 +431,56 @@ public:
 		if(!identifier_is_valid(identifier)) return -3;
 
 		int flagc;
-		flaglist flags = flaglist(i_flags);
+		flaglist request_flags = flaglist(i_flags);
 
 		for(int i = 0; i < claim_entry_count; i++) {
 			if(strcmp(claim_entries[i].identifier, identifier) == 0) {
 				if(claim_entries[i].length != size) return -5;
-				if(!(claim_entries[i].flags == flags)) return -5;
+				if(!(claim_entries[i].flags == request_flags)) return -5;
 				return claim_entries[i].start_addr;
 			}
 		}
 
-		// how am i going to do this
-		// 1. for every freeram block, go over each claim and see what is left unclaimed (how exactly?). if that is big enough, use that
-		// 2. build a massive array showing which ram addresses are available, fill out all claims on that, and find a large enough block and use that
-		// 1st iterates over all claims for each block, 2nd allocates a ton of memory
-		// i think i'll go with 1st
-
 		for(int i = 0; i < ram_entry_count; i++) {
+			if(!ram_entries[i].flags_compatible(request_flags)) continue; // incompatible flags
+			if(ram_entries[i].length < size) continue; // too small even without any claims
 
+			// now we need to figure out which parts (if any) of this freeram are unused
+			// and if there are some, is there a large enough block
+			int blkstart = ram_entries[i].start_addr;
+			int blksize = ram_entries[i].length;
+			bool is_empty[blksize];
+			for(int j = 0; j < claim_entry_count; j++) {
+				int overlap_start, overlap_end;
+				if(ranges_overlap(0, blksize-1, claim_entries[i].start_addr-blkstart, claim_entries[j].start_addr-blkstart+claim_entries[j].length-1, overlap_start, overlap_end)) {
+					// what the fuck is that line
+					// why do i even code at 1:30am
+					for(int k = overlap_start; k <= overlap_end; k++) {
+						is_empty[k] = true;
+					}
+				}
+			}
+			int curblk = 0;
+			int cursize = 0;
+			bool found = false;
+			// find potential gaps in this now
+			for(int j = 0; j < blksize; i++) {
+				if(is_empty[j] == false) {
+					curblk = j;
+					cursize = 0;
+				} else {
+					cursize++;
+					if(cursize >= size) {
+						found = true;
+						break;
+					}
+				}
+			}
+			if(found) {
+				return curblk + blkstart;
+			} else {
+				continue;
+			}
 		}
 	}
 
