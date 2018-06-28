@@ -40,7 +40,7 @@ static void* freeramdll = NULL;
 static freeram_handle (*dll_openfunc)(const char*, char**);
 static int (*dll_closefunc)(freeram_handle);
 static int (*dll_getramfunc)(freeram_handle, int, const char*, const char*);
-static int (*dll_unclaimfunc)(freeram_handle, char*);
+static int (*dll_unclaimfunc)(freeram_handle, const char*);
 
 int freeram_loadlib() {
 	freeramdll = getlib();

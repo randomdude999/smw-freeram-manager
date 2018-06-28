@@ -97,64 +97,185 @@ bool validate_ramdesc_json(cJSON* ramdesc) {
 	return true;
 }
 
-char** split_flags(const char* flags, int* flagc) {
-	int count = 1;
-	for(int i = 0; flags[i]; i++)
-		if(flags[i] == ' ') count++;
-	*flagc = count;
-	char** flag_arr = (char**)calloc(count, sizeof(char*));
-	int curflg = 0;
-	const char* cur_flag = flags;
-	for(int i = 0; flags[i]; i++) {
-		if(flags[i] == ' ') {
-			int flag_len = flags+i - cur_flag;
-			flag_arr[curflg] = malloc(flag_len);
-			strncpy(flag_arr[curflg], flags+i, flag_len);
-			cur_flag = flags+i;
-			curflg++;
+bool flags_ok(const char** ram_flags, int ram_flagc, const char** claim_flags, int claim_flagc) {
+	for(int i = 0; i < claim_flagc; i++) {
+		const char* claim_flg = claim_flags[i];
+		bool claim_neg = false;
+		if(claim_flg[0] == '-') {
+			claim_neg = true;
+			claim_flg++;
 		}
-	}
-	return flag_arr;
-}
-
-bool flag_compare(char** flags_a, char** flags_b, int num) {
-	for(int i = 0; i < num; i++) {
-		if(strcmp(flags_a[i], flags_b[i]) != 0) {
-			return false;
+		bool found = false;
+		for(int j = 0; j < ram_flagc; j++) {
+			if(strcmp(ram_flags[j], claim_flg) == 0) {
+				if(claim_neg) return false;
+				bool found = true;
+				break;
+			}
 		}
+		if(!found && !claim_neg) return false;
 	}
 	return true;
 }
 
 class invalid_ramf_error {};
 
-// it should be safe to deconstruct this while you're in the middle of adding flags
+class flag {
+public:
+	char* name;
+	bool explicit_only;
+	bool negative;
+
+	flag(const char* string) {
+		negative = false;
+		explicit_only = false;
+		if(string[0] == '-') {
+			negative = true;
+			string++;
+		} else if(string[0] == '@') {
+			explicit_only = true;
+			string++;
+		}
+		name = strdup_(string);
+	}
+
+	char* tostring() {
+		char* buf = (char*)malloc(strlen(name)+2);
+		if(negative) {
+			buf[0] = '-';
+			strcpy(buf+1, name);
+		} else if(explicit_only) {
+			buf[0] = '@';
+			strcpy(buf+1, name);
+		} else {
+			strcpy(buf, name);
+		}
+		return buf;
+	}
+
+	~flag() {
+		free(name);
+	}
+
+	bool operator==(flag& other){
+		return strcmp(other.name, name) == 0
+			&& other.explicit_only == explicit_only
+			&& other.negative == negative;
+	}
+
+	bool operator!=(flag& other) {
+		return !(*this == other);
+	}
+};
+
+class flaglist {
+public:
+	flag* flags;
+	int count;
+
+	flaglist(int i_count) {
+		flags = (flag*)calloc(i_count, sizeof(flag));
+		count = 0;
+	}
+	// use this after calling the int constructor
+	void add_flag(const char* flagstr) {
+		flags[count++] = flag(flagstr);
+	}
+
+	flaglist(const char* flagspec) {
+		count = 0;
+		for(int i = 0; flagspec[i]; i++)
+			if(flagspec[i] == ' ') count++;
+		flags = (flag*)calloc(count, sizeof(flag));
+		int curflg = 0;
+		const char* cur_flag = flagspec;
+		for(int i = 0; flagspec[i]; i++) {
+			if(flagspec[i] == ' ') {
+				int flag_len = flagspec+i - cur_flag;
+				char* buf = (char*)malloc(flag_len);
+				strncpy(buf, flagspec+i, flag_len);
+				add_flag(buf);
+				cur_flag = flagspec+i;
+				curflg++;
+			}
+		}
+	}
+
+	~flaglist() {
+		for(int i = 0; i < count; i++) {
+			flags[i].~flag();
+		}
+		free(flags);
+	}
+
+	bool operator==(flaglist& other) {
+		if(count != other.count) return false;
+		for(int i = 0; i < count; i++) {
+			if(flags[i] != other.flags[i]) return false;
+		}
+		return true;
+	}
+
+	flag& operator[](int index) {
+		return flags[index];
+	}
+};
+
 class ram_entry {
 public:
 	int start_addr;
 	int length;
-	char** flags;
-	int flagc;
+	flaglist flags;
 
 	// flagc is only used for preallocating the flag list
-	ram_entry(int i_addr, int i_len, int i_flagc) {
+	ram_entry(int i_addr, int i_len, int i_flagc) : flags(i_flagc) {
 		start_addr = i_addr;
 		length = i_len;
-		flagc = 0;
-		flags = (char**)calloc(i_flagc, sizeof(char*));
+		// flags = flaglist(i_flagc);
 	}
 	// call after calling constructor to add a flag
 	void add_flag(const char* flag) {
-		flags[flagc] = strdup_(flag);
-		flagc++;
+		flags.add_flag(flag);
 	}
 
-	~ram_entry() {
+	bool flags_compatible(flaglist i_flags) {
+		for(int i = 0; i < i_flags.count; i++) {
+			if(i_flags[i].negative) {
+				for(int j = 0; j < flags.count; j++)
+					if(strcmp(flags[j].name, i_flags[i].name) == 0)
+						return false;
+			} else {
+				bool ok = false;
+				for(int j = 0; j < flags.count; j++) {
+					if(strcmp(flags[j].name, i_flags[i].name) == 0) {
+						ok = true; break;
+					}
+				}
+				if(!ok) return false;
+			}
+		}
+		for(int i = 0; i < flags.count; i++) {
+			// if this freeram has any explicit-only flags...
+			if(flags[i].explicit_only) {
+				// and the request didn't specify said flags...
+				bool ok = false;
+				for(int j = 0; j < i_flags.count; j++) {
+					if(strcmp(i_flags[j].name, flags[i].name) == 0) {
+						ok = true; break;
+					}
+				}
+				// then the flags are incompatible
+				if(!ok) return false;
+			}
+		}
+	}
+
+	/*~ram_entry() {
 		for(int i = 0; i < flagc; i++) {
 			free(flags[i]);
 		}
 		free(flags);
-	}
+	}*/
 };
 
 class claim_entry {
@@ -162,28 +283,22 @@ public:
 	int start_addr;
 	int length;
 	char* identifier;
-	char** flags;
-	int flagc;
+	flaglist flags;
 
 	// flagc is only used for preallocating the flag list
-	claim_entry(int i_addr, int i_len, const char* i_id, int i_flagc) {
+	claim_entry(int i_addr, int i_len, const char* i_id, int i_flagc) : flags(i_flagc) {
 		start_addr = i_addr;
 		length = i_len;
 		identifier = strdup_(i_id);
-		flagc = 0;
-		flags = (char**)calloc(i_flagc, sizeof(char*));
+		// flags = flaglist(i_flagc);
 	}
 	// call after calling constructor to add a flag
-	void add_flag(const char* flag) {
-		flags[flagc] = strdup_(flag);
-		flagc++;
+	void add_flag(const char* flagstr) {
+		flags.add_flag(flagstr);
 	}
 
 	~claim_entry() {
-		for(int i = 0; i < flagc; i++) {
-			free(flags[i]);
-		}
-		free(flags);
+		// i think the flaglist gets destroyed automatically?
 		free(identifier);
 	}
 };
@@ -207,6 +322,7 @@ public:
 		cJSON* ram = cJSON_GetObjectItemCaseSensitive(data, "ram");
 
 		int l = cJSON_GetArraySize(ram);
+		// TODO: use new[] here
 		ram_entries = (ram_entry*)calloc(l, sizeof(ram_entry));
 		ram_entry_count = l;
 
@@ -249,7 +365,37 @@ public:
 
 	cJSON* serialize() {
 		cJSON* out = cJSON_CreateObject();
-		// ...
+		cJSON* ramarr = cJSON_CreateArray();
+		for(int i = 0; i < ram_entry_count; i++) {
+			cJSON* ramitem = cJSON_CreateObject();
+			cJSON_AddNumberToObject(ramitem, "address", ram_entries[i].start_addr);
+			cJSON_AddNumberToObject(ramitem, "length", ram_entries[i].length);
+			cJSON* flag_arr = cJSON_CreateArray();
+			for(int j = 0; j < ram_entries[i].flags.count; j++) {
+				char* flg = ram_entries[i].flags.flags[j].tostring();
+				cJSON_AddItemToArray(flag_arr, cJSON_CreateString(flg));
+				free(flg);
+			}
+			cJSON_AddItemToObject(ramitem, "flags", flag_arr);
+			cJSON_AddItemToArray(ramarr, ramitem);
+		}
+		cJSON_AddItemToObject(out, "ram", ramarr);
+
+		cJSON* claimarr = cJSON_CreateObject();
+		for(int i = 0; i < claim_entry_count; i++) {
+			cJSON* claimitem = cJSON_CreateObject();
+			cJSON_AddNumberToObject(claimitem, "address", claim_entries[i].start_addr);
+			cJSON_AddNumberToObject(claimitem, "length", claim_entries[i].length);
+			cJSON* flag_arr = cJSON_CreateArray();
+			for(int j = 0; j < claim_entries[i].flags.count; j++) {
+				char* flg = claim_entries[i].flags.flags[j].tostring();
+				cJSON_AddItemToArray(flag_arr, cJSON_CreateString(flg));
+				free(flg);
+			}
+			cJSON_AddItemToObject(claimitem, "flags", flag_arr);
+			cJSON_AddItemToObject(claimarr, claim_entries[i].identifier, claimitem);
+		}
+		cJSON_AddItemToObject(out, "claims", claimarr);
 		return out;
 	}
 
@@ -267,18 +413,25 @@ public:
 		if(!identifier_is_valid(identifier)) return -3;
 
 		int flagc;
-		char** flags = split_flags(i_flags, &flagc);
+		flaglist flags = flaglist(i_flags);
 
 		for(int i = 0; i < claim_entry_count; i++) {
 			if(strcmp(claim_entries[i].identifier, identifier) == 0) {
 				if(claim_entries[i].length != size) return -5;
-				if(claim_entries[i].flagc != flagc) return -5;
-				if(!flag_compare(claim_entries[i].flags, flags, flagc)) return -5;
+				if(!(claim_entries[i].flags == flags)) return -5;
 				return claim_entries[i].start_addr;
 			}
 		}
 
 		// how am i going to do this
+		// 1. for every freeram block, go over each claim and see what is left unclaimed (how exactly?). if that is big enough, use that
+		// 2. build a massive array showing which ram addresses are available, fill out all claims on that, and find a large enough block and use that
+		// 1st iterates over all claims for each block, 2nd allocates a ton of memory
+		// i think i'll go with 1st
+
+		for(int i = 0; i < ram_entry_count; i++) {
+
+		}
 	}
 
 	int unclaim_ram(const char* identifier) {
@@ -342,7 +495,14 @@ EXPORT freeram_handle* freeram_open(const char* romname, char** err_str) {
 
 EXPORT int freeram_close(freeram_handle* handle) {
 	cJSON* obj = handle->serialize();
-	// write it to a file
+	const char* path = handle->open_path;
+	FILE* f = fopen(path, "w");
+	if(!f) {
+		return 0;
+	}
+	char* text = cJSON_Print(obj);
+	fputs(text, f);
+	fclose(f);
 	cJSON_Delete(obj);
 	delete handle;
 	return 1;

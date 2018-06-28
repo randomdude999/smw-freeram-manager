@@ -8,7 +8,7 @@ commented example document:
 	{
 		"address": 0, // start address of this freeram (SNES address converted to decimal. abs/dp should assume bank 0/dp 0000)
 		"length": 0, // length of this freeram
-		"flags": ["sa1"] // list of flags for this freeram
+		"flags": ["@sa1"] // list of flags for this freeram. If a flag begins with '@', this freeram is only handed out if the requester explicitly asks for it (this could be used for SA1 addresses that don't make sense for non-SA1 roms, but should still be manageable by the freeram system)
 	}
 	],
 	"claims": {

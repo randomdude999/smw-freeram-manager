@@ -8,7 +8,7 @@ int freeram_unloadlib();
 // returns NULL on failure. If it fails, it sets *error to a string describing what went wrong.
 // You need to free that string yourself.
 freeram_handle freeram_open(const char* romname, char** error);
-// Close the specified handle, writing out the file again. returns 1 on success, 0 on failure
+// Close the specified handle, writing out the file again. returns 1 on success, 0 on failure. on failure, check errno
 int freeram_close(freeram_handle handle);
 // Get and claim a freeram address. returns a negative number on failure, or snes address on success
 // -1 - no matching freeram found
