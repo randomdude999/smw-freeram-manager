@@ -296,13 +296,6 @@ public:
 		}
 		return true;
 	}
-
-	/*~ram_entry() {
-		for(int i = 0; i < flagc; i++) {
-			free(flags[i]);
-		}
-		free(flags);
-	}*/
 };
 
 class claim_entry {
@@ -457,10 +450,10 @@ public:
 			// and if there are some, is there a large enough block
 			int blkstart = ram_entries[i].start_addr;
 			int blksize = ram_entries[i].length;
-			bool is_used[blksize] = {false}; // compiler should fill rest with false automatically?
+			bool is_used[blksize] = {false}; // compiler should fill rest with false automatically
 			for(int j = 0; j < claim_entry_count; j++) {
 				int overlap_start, overlap_end;
-				if(ranges_overlap(0, blksize-1, claim_entries[i].start_addr-blkstart, claim_entries[j].start_addr-blkstart+claim_entries[j].length-1, overlap_start, overlap_end)) {
+				if(ranges_overlap(0, blksize-1, claim_entries[j].start_addr-blkstart, claim_entries[j].start_addr-blkstart+claim_entries[j].length-1, overlap_start, overlap_end)) {
 					// what the fuck is that line
 					// why do i even code at 1:30am
 					for(int k = overlap_start; k <= overlap_end; k++) {
@@ -472,7 +465,7 @@ public:
 			int cursize = 0;
 			bool found = false;
 			// find potential gaps in this now
-			for(int j = 0; j < blksize; i++) {
+			for(int j = 0; j < blksize; j++) {
 				if(is_used[j] == true) {
 					cursize = 0;
 				} else {
@@ -573,7 +566,6 @@ EXPORT int freeram_close(freeram_handle* handle) {
 	fclose(f);
 	free(text);
 	cJSON_Delete(obj);
-	// handle->~freeram_handle();
 	delete handle;
 	return 1;
 
