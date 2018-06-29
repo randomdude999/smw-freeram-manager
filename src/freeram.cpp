@@ -143,8 +143,6 @@ bool flags_ok(const char** ram_flags, int ram_flagc, const char** claim_flags, i
 	return true;
 }
 
-class invalid_ramf_error {};
-
 class flag {
 public:
 	char* name;
@@ -338,7 +336,6 @@ public:
 		open_path = strdup_(fname);
 		cJSON* elem;
 		cJSON* tmp;
-		if(!validate_ramdesc_json(data)) throw invalid_ramf_error();
 		cJSON* ram = cJSON_GetObjectItemCaseSensitive(data, "ram");
 
 		int l = cJSON_GetArraySize(ram);
@@ -540,12 +537,12 @@ EXPORT freeram_handle* freeram_open(const char* romname, char** err_str) {
 		return NULL;
 	}
 	free(text);
-	try {
+	if(validate_ramdesc_json(data)) {
 		freeram_handle* h = new freeram_handle(data, ramf_name);
 		cJSON_Delete(data);
 		free(ramf_name);
 		return h;
-	} catch (invalid_ramf_error) {
+	} else {
 		cJSON_Delete(data);
 		*err_str = (char*)malloc(256);
 		strcpy(*err_str, "Invalid JSON data found");
