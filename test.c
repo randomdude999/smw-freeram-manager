@@ -12,7 +12,7 @@ int main() {
 		fprintf(stderr, "Couldn't load ramfile: %s\n", error);
 		return 1;
 	}
-	fprintf(stderr, "Claimed freeram: %08X\n", freeram_get_ram(handle, 32, "test", "addr clear_ow"));
+	fprintf(stderr, "Claimed freeram: %08X\n", freeram_get_ram(handle, 2, "test", "addr clear_ow"));
 
 	freeram_close(handle);
 	freeram_unloadlib();

@@ -5,7 +5,7 @@
 #include <errno.h> // errno
 #include <new> // placement new
 
-// note to self: placement new is a gift of god
+// todo: check the valgrind errors
 
 #include "cJSON.h"
 
@@ -199,7 +199,7 @@ public:
 	int count;
 
 	flaglist(int i_count) {
-		flags = (flag*)new char[i_count * sizeof(flag)];
+		flags = (flag*)calloc(i_count, sizeof(flag));
 		count = 0;
 	}
 	// use this after calling the int constructor
@@ -212,7 +212,7 @@ public:
 		count = 1;
 		for(int i = 0; flagspec[i]; i++)
 			if(flagspec[i] == ' ') count++;
-		flags = (flag*)new char[count * sizeof(flag)];
+		flags = (flag*)calloc(count, sizeof(flag));
 		count = 0; // to not fuck up add_flag
 		const char* cur_flag = flagspec;
 		for(int i = 0; true; i++) {
@@ -222,6 +222,7 @@ public:
 				strncpy(buf, cur_flag, flag_len);
 				buf[flag_len] = '\0'; // strncpy doesn't add a terminator
 				add_flag(buf);
+				free(buf);
 				cur_flag = flagspec+i;
 			}
 			if(flagspec[i] == '\0') break;
@@ -229,10 +230,7 @@ public:
 	}
 
 	~flaglist() {
-		// maybe not then
-		/*for(int i = 0; i < count; i++) {
-			flags[i].~flag();
-		}*/
+		for(int i = 0; i < count; i++) flags[i].~flag();
 		free(flags);
 	}
 
@@ -266,7 +264,7 @@ public:
 		flags.add_flag(flag);
 	}
 
-	bool flags_compatible(flaglist i_flags) {
+	bool flags_compatible(flaglist& i_flags) {
 		for(int i = 0; i < i_flags.count; i++) {
 			if(i_flags[i].negative) {
 				for(int j = 0; j < flags.count; j++)
@@ -350,8 +348,7 @@ public:
 		cJSON* ram = cJSON_GetObjectItemCaseSensitive(data, "ram");
 
 		int l = cJSON_GetArraySize(ram);
-		// slightly hacky but i can't call the constructors yet
-		ram_entries = (ram_entry*)new char[l * sizeof(ram_entry)];
+		ram_entries = (ram_entry*)calloc(l, sizeof(ram_entry));
 		ram_entry_count = l;
 
 		int i = 0;
@@ -372,7 +369,7 @@ public:
 		cJSON* claims = cJSON_GetObjectItemCaseSensitive(data, "claims");
 
 		l = cJSON_GetArraySize(claims);
-		claim_entries = (claim_entry*)new char[l * sizeof(claim_entry)];
+		claim_entries = (claim_entry*)calloc(l, sizeof(claim_entry));
 		claim_entry_count = l;
 
 		i = 0;
@@ -428,10 +425,9 @@ public:
 	}
 
 	~freeram_handle() {
-		/*for(int i = 0; i < ram_entry_count; i++)
+		for(int i = 0; i < ram_entry_count; i++)
 			ram_entries[i].~ram_entry();
-		free(ram_entries);*/
-		delete[] ram_entries;
+		free(ram_entries);
 		for(int i = 0; i < claim_entry_count; i++)
 			claim_entries[i].~claim_entry();
 		free(claim_entries);
@@ -551,6 +547,7 @@ EXPORT freeram_handle* freeram_open(const char* romname, char** err_str) {
 	try {
 		freeram_handle* h = new freeram_handle(data, ramf_name);
 		cJSON_Delete(data);
+		free(ramf_name);
 		return h;
 	} catch (invalid_ramf_error) {
 		cJSON_Delete(data);
@@ -571,7 +568,9 @@ EXPORT int freeram_close(freeram_handle* handle) {
 	char* text = cJSON_Print(obj);
 	fputs(text, f);
 	fclose(f);
+	free(text);
 	cJSON_Delete(obj);
+	// handle->~freeram_handle();
 	delete handle;
 	return 1;
 
