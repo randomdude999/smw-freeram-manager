@@ -223,7 +223,7 @@ public:
 				buf[flag_len] = '\0'; // strncpy doesn't add a terminator
 				add_flag(buf);
 				free(buf);
-				cur_flag = flagspec+i;
+				cur_flag = flagspec+i+1;
 			}
 			if(flagspec[i] == '\0') break;
 		}
@@ -294,6 +294,7 @@ public:
 				if(!ok) return false;
 			}
 		}
+		return true;
 	}
 
 	/*~ram_entry() {
@@ -456,14 +457,14 @@ public:
 			// and if there are some, is there a large enough block
 			int blkstart = ram_entries[i].start_addr;
 			int blksize = ram_entries[i].length;
-			bool is_empty[blksize];
+			bool is_used[blksize] = {false}; // compiler should fill rest with false automatically?
 			for(int j = 0; j < claim_entry_count; j++) {
 				int overlap_start, overlap_end;
 				if(ranges_overlap(0, blksize-1, claim_entries[i].start_addr-blkstart, claim_entries[j].start_addr-blkstart+claim_entries[j].length-1, overlap_start, overlap_end)) {
 					// what the fuck is that line
 					// why do i even code at 1:30am
 					for(int k = overlap_start; k <= overlap_end; k++) {
-						is_empty[k] = true;
+						is_used[k] = true;
 					}
 				}
 			}
@@ -472,10 +473,10 @@ public:
 			bool found = false;
 			// find potential gaps in this now
 			for(int j = 0; j < blksize; i++) {
-				if(is_empty[j] == false) {
-					curblk = j;
+				if(is_used[j] == true) {
 					cursize = 0;
 				} else {
+					if(cursize == 0) curblk = j;
 					cursize++;
 					if(cursize >= size) {
 						found = true;
@@ -488,8 +489,10 @@ public:
 				// add the claim
 				claim_entry_count++;
 				claim_entries = (claim_entry*)realloc(claim_entries, claim_entry_count*sizeof(claim_entry));
-				claim_entries[claim_entry_count-1] = claim_entry(loc, size, identifier, request_flags.count);
-				claim_entries[claim_entry_count-1].flags = request_flags;
+				claim_entry* item = new(claim_entries+claim_entry_count-1) claim_entry(loc, size, identifier, request_flags.count);
+				for(int i = 0; i < request_flags.count; i++) {
+					item->add_flag(request_flags[i].tostring());
+				}
 				return loc;
 			} else {
 				continue;
