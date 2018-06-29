@@ -3,6 +3,9 @@
 #include <string.h> // strlen, strcmp, strerror
 #include <stdlib.h> // malloc, calloc, free
 #include <errno.h> // errno
+#include <new> // placement new
+
+// note to self: placement new is a gift of god
 
 #include "cJSON.h"
 
@@ -29,6 +32,12 @@ bool identifier_is_valid(const char* identifier) {
 	return true;
 }
 
+bool flag_is_valid(const char* flagstr) {
+	if(flagstr == NULL) return false;
+	if(flagstr[0] == '-' || flagstr[0] == '@') flagstr++;
+	return identifier_is_valid(flagstr);
+}
+
 char* strdup_(const char* inp) {
 	char* out = (char*)malloc(strlen(inp)+1);
 	strcpy(out, inp);
@@ -39,7 +48,8 @@ char* read_file_into_str(FILE* f) {
 	char* buf;
 	fseek(f, 0, SEEK_END);
 	long length = ftell(f);
-	buf = (char*)malloc(length);
+	rewind(f);
+	buf = (char*)calloc(length+1, 1); // allocate 1 byte after end for a null terminator just in case
 	fread(buf, 1, length, f);
 	return buf;
 }
@@ -82,7 +92,7 @@ bool validate_ramdesc_json(cJSON* ramdesc) {
 
 		cJSON_ArrayForEach(tmp, flags_arr) {
 			if(!cJSON_IsString(tmp)) return false;
-			if(!identifier_is_valid(tmp->valuestring)) return false;
+			if(!flag_is_valid(tmp->valuestring)) return false;
 		}
 	}
 
@@ -105,10 +115,7 @@ bool validate_ramdesc_json(cJSON* ramdesc) {
 
 		cJSON_ArrayForEach(tmp, flags_arr) {
 			if(!cJSON_IsString(tmp)) return false;
-			const char* flag;
-			if(tmp->valuestring[0] == '-') flag = tmp->valuestring + 1;
-			else flag = tmp->valuestring;
-			if(!identifier_is_valid(flag)) return false;
+			if(!flag_is_valid(tmp->valuestring)) return false;
 		}
 	}
 
@@ -192,37 +199,40 @@ public:
 	int count;
 
 	flaglist(int i_count) {
-		flags = (flag*)calloc(i_count, sizeof(flag));
+		flags = (flag*)new char[i_count * sizeof(flag)];
 		count = 0;
 	}
 	// use this after calling the int constructor
 	void add_flag(const char* flagstr) {
-		flags[count++] = flag(flagstr);
+		new(flags+count) flag(flagstr);
+		count++;
 	}
 
 	flaglist(const char* flagspec) {
-		count = 0;
+		count = 1;
 		for(int i = 0; flagspec[i]; i++)
 			if(flagspec[i] == ' ') count++;
-		flags = (flag*)calloc(count, sizeof(flag));
-		int curflg = 0;
+		flags = (flag*)new char[count * sizeof(flag)];
+		count = 0; // to not fuck up add_flag
 		const char* cur_flag = flagspec;
-		for(int i = 0; flagspec[i]; i++) {
-			if(flagspec[i] == ' ') {
+		for(int i = 0; true; i++) {
+			if(flagspec[i] == ' ' || flagspec[i] == '\0') {
 				int flag_len = flagspec+i - cur_flag;
-				char* buf = (char*)malloc(flag_len);
-				strncpy(buf, flagspec+i, flag_len);
+				char* buf = (char*)malloc(flag_len+1);
+				strncpy(buf, cur_flag, flag_len);
+				buf[flag_len] = '\0'; // strncpy doesn't add a terminator
 				add_flag(buf);
 				cur_flag = flagspec+i;
-				curflg++;
 			}
+			if(flagspec[i] == '\0') break;
 		}
 	}
 
 	~flaglist() {
-		for(int i = 0; i < count; i++) {
+		// maybe not then
+		/*for(int i = 0; i < count; i++) {
 			flags[i].~flag();
-		}
+		}*/
 		free(flags);
 	}
 
@@ -340,8 +350,8 @@ public:
 		cJSON* ram = cJSON_GetObjectItemCaseSensitive(data, "ram");
 
 		int l = cJSON_GetArraySize(ram);
-		// TODO: use new[] here
-		ram_entries = (ram_entry*)calloc(l, sizeof(ram_entry));
+		// slightly hacky but i can't call the constructors yet
+		ram_entries = (ram_entry*)new char[l * sizeof(ram_entry)];
 		ram_entry_count = l;
 
 		int i = 0;
@@ -352,9 +362,9 @@ public:
 
 			cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
 			int numflags = cJSON_GetArraySize(flags_arr);
-			ram_entries[i] = ram_entry(start_addr, length, numflags);
+			ram_entry* item = new(ram_entries+i) ram_entry(start_addr, length, numflags);
 			cJSON_ArrayForEach(tmp, flags_arr) {
-				ram_entries[i].add_flag(tmp->valuestring);
+				item->add_flag(tmp->valuestring);
 			}
 			i++;
 		}
@@ -362,7 +372,7 @@ public:
 		cJSON* claims = cJSON_GetObjectItemCaseSensitive(data, "claims");
 
 		l = cJSON_GetArraySize(claims);
-		claim_entries = (claim_entry*)calloc(l, sizeof(claim_entry));
+		claim_entries = (claim_entry*)new char[l * sizeof(claim_entry)];
 		claim_entry_count = l;
 
 		i = 0;
@@ -373,9 +383,9 @@ public:
 
 			cJSON* flags_arr = cJSON_GetObjectItemCaseSensitive(elem, "flags");
 			int numflags = cJSON_GetArraySize(flags_arr);
-			claim_entries[i] = claim_entry(addr, len, id, numflags);
+			claim_entry* item = new(claim_entries+i) claim_entry(addr, len, id, numflags);
 			cJSON_ArrayForEach(tmp, flags_arr) {
-				claim_entries[i].add_flag(tmp->valuestring);
+				item->add_flag(tmp->valuestring);
 			}
 			i++;
 		}
@@ -390,7 +400,7 @@ public:
 			cJSON_AddNumberToObject(ramitem, "length", ram_entries[i].length);
 			cJSON* flag_arr = cJSON_CreateArray();
 			for(int j = 0; j < ram_entries[i].flags.count; j++) {
-				char* flg = ram_entries[i].flags.flags[j].tostring();
+				char* flg = ram_entries[i].flags[j].tostring();
 				cJSON_AddItemToArray(flag_arr, cJSON_CreateString(flg));
 				free(flg);
 			}
@@ -406,7 +416,7 @@ public:
 			cJSON_AddNumberToObject(claimitem, "length", claim_entries[i].length);
 			cJSON* flag_arr = cJSON_CreateArray();
 			for(int j = 0; j < claim_entries[i].flags.count; j++) {
-				char* flg = claim_entries[i].flags.flags[j].tostring();
+				char* flg = claim_entries[i].flags[j].tostring();
 				cJSON_AddItemToArray(flag_arr, cJSON_CreateString(flg));
 				free(flg);
 			}
@@ -418,9 +428,10 @@ public:
 	}
 
 	~freeram_handle() {
-		for(int i = 0; i < ram_entry_count; i++)
+		/*for(int i = 0; i < ram_entry_count; i++)
 			ram_entries[i].~ram_entry();
-		free(ram_entries);
+		free(ram_entries);*/
+		delete[] ram_entries;
 		for(int i = 0; i < claim_entry_count; i++)
 			claim_entries[i].~claim_entry();
 		free(claim_entries);
@@ -477,11 +488,18 @@ public:
 				}
 			}
 			if(found) {
-				return curblk + blkstart;
+				int loc = curblk + blkstart;
+				// add the claim
+				claim_entry_count++;
+				claim_entries = (claim_entry*)realloc(claim_entries, claim_entry_count*sizeof(claim_entry));
+				claim_entries[claim_entry_count-1] = claim_entry(loc, size, identifier, request_flags.count);
+				claim_entries[claim_entry_count-1].flags = request_flags;
+				return loc;
 			} else {
 				continue;
 			}
 		}
+		return -1;
 	}
 
 	int unclaim_ram(const char* identifier) {
