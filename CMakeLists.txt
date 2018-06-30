@@ -3,6 +3,7 @@ add_library(
 	freeram SHARED
 	"src/freeram.cpp"
 	"src/cJSON.c"
+	"src/malloc.cpp"
 )
 
 add_executable(

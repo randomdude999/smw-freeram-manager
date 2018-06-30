@@ -3,9 +3,7 @@
 #include <string.h> // strlen, strcmp, strerror
 #include <stdlib.h> // malloc, calloc, free
 #include <errno.h> // errno
-#include <new> // placement new
-
-// todo: check the valgrind errors
+#include "malloc.hpp" // custom new/delete
 
 #include "cJSON.h"
 
