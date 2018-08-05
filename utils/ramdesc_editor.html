@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Freeram ramdesc editor</title>
+	<script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+	<meta charset="utf-8">
+	<style>
+		.main_a {
+			height: 50%;
+			border: 1px solid black;
+			position: relative;
+			overflow-y: hidden;
+		}
+		.main_a .tbl_wrapper {
+			overflow-y: scroll;
+			height: 100%;
+		}
+		.main_a > input {
+			position: absolute;
+			bottom: 5px;
+			right: 5px;
+		}
+		#editor {
+			height: calc(100% - 16px);
+			width: calc(100% - 16px);
+			margin: 8px;
+			position: absolute;
+			top: 0;
+			left: 0;
+			/* display: flex; is added by javascript */
+			flex-direction: column;
+		}
+		#save_btn {
+			align-self: flex-start;
+		}
+	</style>
+	<script>
+// this looks a bit hacky but it seems to work fine so ¯\_(ツ)_/¯
+// (copied from alcaro's javascript bps patcher. no idea where he got it from)
+function download(data, fname, mime) {
+	var a = document.createElement("a");
+	a.href = URL.createObjectURL(new Blob([data], { type: mime || "application/octet-stream" }));
+	a.setAttribute("download", fname);
+	a.style.display = "none";
+	document.body.appendChild(a);
+	setTimeout(function() {
+			a.click();
+			document.body.removeChild(a);
+			setTimeout(function(){ self.URL.revokeObjectURL(a.href); }, 250 );
+		}, 66);
+}
+var ramfname;
+function load_ramdesc() {
+	var file = document.getElementById('ramdesc_f').files[0];
+	var reader = new FileReader();
+	reader.onload = function() {
+		show_editor(JSON.parse(reader.result));
+	};
+	ramfname = file.name;
+	reader.readAsText(file);
+}
+
+function blank_ramdesc() {
+	ramfname = "smw.ramdesc";
+	show_editor({
+		"ram": [],
+		"claims": {}
+	});
+}
+
+function blank_row(has_id, defvals) {
+		var row = $("<tr class='contentrow'>");
+
+		if(has_id)
+			var idinput = $('<input class="idinp">');
+		var addrinput = $('<input class="addrinp" pattern="[a-fA-F\\d]+">');
+		var lengthinput = $('<input class="lengthinp" type=number>');
+		var flagsinput = $('<input class="flagsinp">');
+
+		if(defvals !== undefined) {
+			addrinput.val(defvals["addr"]);
+			lengthinput.val(defvals["length"]);
+			flagsinput.val(defvals["flags"]);
+			if(has_id) idinput.val(defvals["id"]);
+		}
+
+		if(has_id)
+			row.append($("<td>").append(idinput));
+		row.append($("<td>").append(addrinput));
+		row.append($("<td>").append(lengthinput));
+		row.append($("<td>").append(flagsinput));
+		row.append($("<td>").append($('<input type=button value="-">').click(function(){
+			$(this).parent().parent().remove();
+		})));
+
+		return row;
+}
+
+function show_editor(ramdesc_data) {
+	$("#load").css("display", "none");
+	$("#editor").css("display", "flex");
+	ramdesc_data.ram.forEach(function(ram) {
+		var row = blank_row(false, {
+			addr: ram.address.toString(16),
+			length: ram.length,
+			flags: ram.flags.join(" ")
+		});
+		$("#addrlist").append(row);
+	});
+
+	for(var id in ramdesc_data.claims) {
+		var claim = ramdesc_data.claims[id];
+		var row = blank_row(true, {
+			id: id,
+			addr: claim.address.toString(16),
+			length: claim.length,
+			flags: claim.flags.join(" ")
+		});
+		$("#claimlist").append(row);
+	}
+}
+
+function add_addr() {
+	var row = blank_row(false);
+	$("#addrlist").append(row);
+}
+
+function add_claim() {
+	var row = blank_row(true);
+	$("#claimlist").append(row);
+}
+function get_json() {
+	var js = {
+		ram: [],
+		claims: {}
+	};
+	$("#addrlist tr.contentrow").each(function(index, elem) {
+		var r = {};
+		console.log(elem);
+		r.address = parseInt($(elem).find(".addrinp").val(), 16);
+		r.length = parseInt($(elem).find(".lengthinp").val(), 10);
+		r.flags = $(elem).find(".flagsinp").val().split(" ");
+		js.ram.push(r);
+	});
+	$("#claimlist tr.contentrow").each(function(index, elem) {
+		var r = {};
+		r.address = parseInt($(elem).find(".addrinp").val(), 16);
+		r.length = parseInt($(elem).find(".lengthinp").val(), 10);
+		r.flags = $(elem).find(".flagsinp").val().split(" ");
+		js.claims[$(elem).find(".idinp").val()] = r;
+	});
+	download(JSON.stringify(js,null,4), ramfname, "application/json");
+}
+
+	</script>
+</head>
+<body>
+	<div id="load">
+		<p>Load ramdesc: <input type="file" id="ramdesc_f" onchange="load_ramdesc()"></p>
+		<p>Or <input type="button" onclick="blank_ramdesc()" value="Create Blank"></p>
+	</div>
+	<div id="editor" style="display:none">
+		<input type="button" onclick="get_json()" value="Save" id="save_btn">
+		<div id="addrs" class="main_a">
+			<div class="tbl_wrapper">
+				<table id="addrlist">
+					<tr><th>Address</th><th>Length</th><th>Flags</th></tr>
+				</table>
+			</div>
+			<input type="button" onclick="add_addr()" value="+">
+		</div>
+		<div id="claims" class="main_a">
+			<div class="tbl_wrapper">
+				<table id="claimlist">
+					<tr><th>ID</th><th>Address</th><th>Length</th><th>Flags</th></tr>
+				</table>
+			</div>
+			<input type="button" onclick="add_claim()" value="+">
+		</div>
+	</div>
+</body>
+</html>
