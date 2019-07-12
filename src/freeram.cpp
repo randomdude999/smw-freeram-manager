@@ -445,7 +445,9 @@ public:
 			// and if there are some, is there a large enough block
 			int blkstart = ram_entries[i].start_addr;
 			int blksize = ram_entries[i].length;
-			bool is_used[blksize] = {false}; // compiler should fill rest with false automatically
+			// array for keeping track of which bytes of this block are used
+			bool* is_used = (bool*)malloc(blksize * sizeof(bool));
+			memset(is_used, 0, blksize * sizeof(bool));
 			for(int j = 0; j < claim_entry_count; j++) {
 				int overlap_start, overlap_end;
 				if(ranges_overlap(0, blksize-1, claim_entries[j].start_addr-blkstart, claim_entries[j].start_addr-blkstart+claim_entries[j].length-1, overlap_start, overlap_end)) {
@@ -472,6 +474,7 @@ public:
 					}
 				}
 			}
+			free(is_used);
 			if(found) {
 				int loc = curblk + blkstart;
 				// add the claim
