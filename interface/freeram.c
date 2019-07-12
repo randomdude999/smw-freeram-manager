@@ -4,7 +4,6 @@
 #	include <Windows.h>
 
 #	define getlib() LoadLibrary("freeram.dll")
-//#	define loadraw(name, target) *((int(**)(void))&target)=(int(*)(void))GetProcAddress((HINSTANCE)asardll, name); require(target)
 #	define getptr(name) GetProcAddress((HINSTANCE)freeramdll, name)
 #	define closelib() FreeLibrary((HINSTANCE)freeramdll)
 #else
@@ -19,11 +18,9 @@
 
 	inline static void * getlib(void)
 	{
-		const char * names[]={"./libfreeram" EXTENSION, "libfreeram" EXTENSION, NULL};
+		const char* names[]= {"./libfreeram" EXTENSION, "libfreeram" EXTENSION, NULL};
 		for (int i=0;names[i];i++) {
-			void * rval=dlopen(names[i], RTLD_LAZY);
-			const char*e=dlerror();
-			if(e)puts(e);
+			void* rval = dlopen(names[i], RTLD_LAZY);
 			if (rval) return rval;
 		}
 		return NULL;
@@ -46,13 +43,13 @@ int freeram_loadlib() {
 	freeramdll = getlib();
 	if(freeramdll == NULL) return 0;
 	dll_openfunc = getptr("freeram_open");
-	if(!dll_openfunc) {freeramdll = NULL; return 0;}
+	if(!dll_openfunc) {closelib(); freeramdll = NULL; return 0;}
 	dll_closefunc = getptr("freeram_close");
-	if(!dll_closefunc) {freeramdll = NULL; return 0;}
+	if(!dll_closefunc) {closelib(); freeramdll = NULL; return 0;}
 	dll_getramfunc = getptr("freeram_get_ram");
-	if(!dll_getramfunc) {freeramdll = NULL; return 0;}
+	if(!dll_getramfunc) {closelib(); freeramdll = NULL; return 0;}
 	dll_unclaimfunc = getptr("freeram_unclaim_ram");
-	if(!dll_unclaimfunc) {freeramdll = NULL; return 0;}
+	if(!dll_unclaimfunc) {closelib(); freeramdll = NULL; return 0;}
 	return 1;
 }
 int freeram_unloadlib() {
