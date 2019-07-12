@@ -2,13 +2,15 @@
 typedef void* freeram_handle;
 
 // (un)load the library. returns 1 on success, 0 on failure
+// it's usually not necessary to manually unload the library before application exit
 int freeram_loadlib();
 int freeram_unloadlib();
 // Open the ram file for the specified ROM. Pass in the name of the ROM, ending with .smc/.sfc.
 // returns NULL on failure. If it fails, it sets *error to a string describing what went wrong.
 // You need to free that string yourself.
 freeram_handle freeram_open(const char* romname, char** error);
-// Close the specified handle, writing out the file again. returns 1 on success, 0 on failure. on failure, check errno
+// Close the specified handle, writing out the file again. returns 1 on success, 0 on failure. on failure, check errno.
+// You need to call this after you're done with the ROM.
 int freeram_close(freeram_handle handle);
 // Get and claim a freeram address. returns a negative number on failure, or snes address on success
 // -1 - no matching freeram found
