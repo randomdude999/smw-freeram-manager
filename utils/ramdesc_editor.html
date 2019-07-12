@@ -33,6 +33,15 @@
 		#save_btn {
 			align-self: flex-start;
 		}
+		h3 {
+			margin: 0 10px;
+		}
+		table, th, td {
+			border: 1px solid black;
+		}
+		table {
+			border-collapse: collapse;
+		}
 	</style>
 	<script>
 // this looks a bit hacky but it seems to work fine so ¯\_(ツ)_/¯
@@ -163,6 +172,7 @@ function get_json() {
 		<input type="button" onclick="get_json()" value="Save" id="save_btn">
 		<div id="addrs" class="main_a">
 			<div class="tbl_wrapper">
+				<h3>RAM addresses</h3>
 				<table id="addrlist">
 					<tr><th>Address</th><th>Length</th><th>Flags</th></tr>
 				</table>
@@ -171,6 +181,7 @@ function get_json() {
 		</div>
 		<div id="claims" class="main_a">
 			<div class="tbl_wrapper">
+				<h3>Claims</h3>
 				<table id="claimlist">
 					<tr><th>ID</th><th>Address</th><th>Length</th><th>Flags</th></tr>
 				</table>
