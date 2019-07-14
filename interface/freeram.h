@@ -1,3 +1,6 @@
+#ifdef __cplusplus__
+extern "C" {
+#endif
 
 typedef void* freeram_handle;
 
@@ -23,3 +26,7 @@ int freeram_get_ram(freeram_handle handle, int size, const char* identifier, con
 // returns -1 if that address wasn't claimed
 //         -2 if the library isn't loaded
 int freeram_unclaim_ram(freeram_handle handle, const char* identifier);
+
+#ifdef __cplusplus__
+}
+#endif
