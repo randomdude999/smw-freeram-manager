@@ -1,1 +1,10 @@
+# folders
 build/
+.vscode/
+# rom related files
+*.smc
+*.sfc
+*.srm
+# ramdescs outside the correct directory (probably just temp)
+*.ramdesc
+!ramdesc/*.ramdesc
