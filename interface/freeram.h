@@ -1,4 +1,4 @@
-#ifdef __cplusplus__
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -27,6 +27,6 @@ int freeram_get_ram(freeram_handle handle, int size, const char* identifier, con
 //         -2 if the library isn't loaded
 int freeram_unclaim_ram(freeram_handle handle, const char* identifier);
 
-#ifdef __cplusplus__
+#ifdef __cplusplus
 }
 #endif
