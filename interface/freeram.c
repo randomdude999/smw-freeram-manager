@@ -5,7 +5,7 @@
 
 #	define getlib() LoadLibrary("freeram.dll")
 #	define getptr(name) GetProcAddress((HINSTANCE)freeramdll, name)
-#	define closelib() FreeLibrary((HINSTANCE)freeramdll)
+#	define closelib() (FreeLibrary((HINSTANCE)freeramdll) ? 1 : 0)
 #else
 #	include <dlfcn.h>
 #	include <stdio.h>
@@ -27,7 +27,7 @@
 	}
 
 #	define getptr(name) dlsym(freeramdll, name)
-#	define closelib() dlclose(freeramdll)
+#	define closelib() (dlclose(freeramdll) ? 0 : 1)
 #endif
 
 #include "freeram.h"
@@ -53,7 +53,7 @@ int freeram_loadlib() {
 	return 1;
 }
 int freeram_unloadlib() {
-	closelib();
+	return closelib();
 }
 
 freeram_handle freeram_open(const char* romname, char** error) {
