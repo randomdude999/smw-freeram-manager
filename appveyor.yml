@@ -1,0 +1,30 @@
+version: '{build}'
+image: Visual Studio 2015
+environment:
+  matrix:
+    - JOB_NAME: "xp_compat"
+      CMAKE_TARGET: "Visual Studio 14 2015"
+      PLATFORM: "Win32"
+      CMAKE_PLATFORM_TOOLSET: "-T v140_xp"
+    - JOB_NAME: "win64"
+      CMAKE_TARGET: "Visual Studio 14 2015 Win64"
+      PLATFORM: "x64"
+      CMAKE_PLATFORM_TOOLSET: "-T v140"
+
+install:
+- cmd: >-
+    mkdir build
+
+    cd build
+
+    cmake -G "%CMAKE_TARGET%" %CMAKE_PLATFORM_TOOLSET% ..
+
+configuration: MinSizeRel
+
+artifacts:
+- path: build\**\freeram.dll
+
+#TODO
+#test_script:
+#  - cmd: >-
+#      .\%CONFIGURATION%\freeram_test.exe
